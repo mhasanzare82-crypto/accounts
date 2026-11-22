@@ -5,6 +5,9 @@ on:
     branches:
       - main
       - feature/dual-chatgpt-accounts
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
