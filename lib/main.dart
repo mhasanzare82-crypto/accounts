@@ -122,12 +122,6 @@ class _AccountWebView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox.expand().buildWebView(profileName);
-  }
-}
-
-extension on SizedBox {
-  Widget buildWebView(String profileName) {
     return AndroidView(
       viewType: 'chatgpt/accounts_webview',
       creationParams: <String, String>{
