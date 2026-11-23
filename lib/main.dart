@@ -13,7 +13,7 @@ class ChatGPTAccountsApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'چهار حساب ChatGPT',
+      title: 'accounts',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF10A37F),
@@ -42,28 +42,28 @@ class _AccountProfile {
 
 const List<_AccountProfile> _accountProfiles = [
   _AccountProfile(
-    label: 'حساب اول',
+    label: 'حساب ۱',
     profileName: 'chatgpt_account_one',
-    icon: Icons.person_outline,
-    selectedIcon: Icons.person,
+    icon: Icons.account_circle_outlined,
+    selectedIcon: Icons.account_circle,
   ),
   _AccountProfile(
-    label: 'حساب دوم',
+    label: 'حساب ۲',
     profileName: 'chatgpt_account_two',
-    icon: Icons.person_2_outlined,
-    selectedIcon: Icons.person_2,
+    icon: Icons.account_circle_outlined,
+    selectedIcon: Icons.account_circle,
   ),
   _AccountProfile(
-    label: 'حساب سوم',
+    label: 'حساب ۳',
     profileName: 'chatgpt_account_three',
     icon: Icons.account_circle_outlined,
     selectedIcon: Icons.account_circle,
   ),
   _AccountProfile(
-    label: 'حساب چهارم',
+    label: 'حساب ۴',
     profileName: 'chatgpt_account_four',
-    icon: Icons.manage_accounts_outlined,
-    selectedIcon: Icons.manage_accounts,
+    icon: Icons.account_circle_outlined,
+    selectedIcon: Icons.account_circle,
   ),
 ];
 
