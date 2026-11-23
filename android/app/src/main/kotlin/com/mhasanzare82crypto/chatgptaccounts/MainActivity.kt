@@ -2,8 +2,12 @@ package com.mhasanzare82crypto.chatgptaccounts
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.content.pm.PackageManager
 import android.view.View
+import android.app.AlertDialog
+import android.provider.Settings
 import android.webkit.WebView
 import android.webkit.WebChromeClient
 import android.webkit.PermissionRequest
@@ -47,10 +51,30 @@ class MainActivity : FlutterActivity() {
             if (request != null) {
                 if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     request.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
-                } else request.deny()
+                } else {
+                    request.deny()
+                    showMicrophoneSettingsDialog()
+                }
             }
         }
     }
+
+    private fun showMicrophoneSettingsDialog() {
+        runOnUiThread {
+            AlertDialog.Builder(this)
+                .setTitle("مجوز میکروفون لازم است")
+                .setMessage("برای استفاده از میکروفون در ChatGPT، مجوز میکروفون برنامه را فعال کن. می‌توانی وارد تنظیمات برنامه شوی و دسترسی میکروفون را بدهی.")
+                .setNegativeButton("بعداً", null)
+                .setPositiveButton("رفتن به تنظیمات") { _, _ ->
+                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.fromParts("package", packageName, null)
+                    }
+                    startActivity(intent)
+                }
+                .show()
+        }
+    }
+
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
