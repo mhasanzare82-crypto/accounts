@@ -20,6 +20,7 @@ import io.flutter.plugin.platform.PlatformView
 import io.flutter.plugin.platform.PlatformViewFactory
 
 class MainActivity : FlutterActivity() {
+    private var pendingWebPermissionRequest: PermissionRequest? = null
     private val microphonePermissionRequestCode = 7314
     private val channelName = "com.example.chatgpt_accounts/profiles"
 
@@ -30,6 +31,12 @@ class MainActivity : FlutterActivity() {
         }
         pendingWebPermissionRequest = request
         requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), microphonePermissionRequestCode)
+    }
+
+    fun cancelWebMicrophonePermissionRequest(request: PermissionRequest): Boolean {
+        if (pendingWebPermissionRequest != request) return false
+        pendingWebPermissionRequest = null
+        return true
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -122,13 +129,13 @@ private class ChatGPTWebPlatformView(
                 }
                 if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
                     request.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
-                } else if (pendingWebPermissionRequest == null) {
+                } else {
                     (context as? MainActivity)?.requestWebMicrophonePermission(request) ?: request.deny()
-                } else request.deny()
+                }
             }
 
             override fun onPermissionRequestCanceled(request: PermissionRequest) {
-                if ((context as? MainActivity)?.cancelWebMicrophonePermissionRequest(request) == true) { }
+                (context as? MainActivity)?.cancelWebMicrophonePermissionRequest(request)
             }
         }
 
