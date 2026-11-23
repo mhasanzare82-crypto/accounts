@@ -1,10 +1,15 @@
 package com.mhasanzare82crypto.chatgptaccounts
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.view.View
 import android.webkit.WebView
+import android.webkit.WebChromeClient
+import android.webkit.PermissionRequest
 import android.webkit.WebViewClient
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import androidx.core.content.ContextCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import io.flutter.embedding.android.FlutterActivity
@@ -15,7 +20,26 @@ import io.flutter.plugin.platform.PlatformView
 import io.flutter.plugin.platform.PlatformViewFactory
 
 class MainActivity : FlutterActivity() {
+    private var pendingWebPermissionRequest: PermissionRequest? = null
+    private val microphonePermissionRequestCode = 7314
     private val channelName = "com.example.chatgpt_accounts/profiles"
+
+    private fun requestMicrophonePermission() {
+        requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), microphonePermissionRequestCode)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == microphonePermissionRequestCode) {
+            val request = pendingWebPermissionRequest
+            pendingWebPermissionRequest = null
+            if (request != null) {
+                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    request.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
+                } else request.deny()
+            }
+        }
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -80,6 +104,28 @@ private class ChatGPTWebPlatformView(
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView, url: String?) {
                 swipeRefresh.isRefreshing = false
+            }
+        }
+
+        webView.webChromeClient = object : WebChromeClient() {
+            override fun onPermissionRequest(request: PermissionRequest) {
+                val host = request.origin.host
+                val trustedOrigin = host == "chatgpt.com" || host?.endsWith(".chatgpt.com") == true
+                val audioOnly = request.resources.size == 1 && request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)
+                if (!trustedOrigin || !audioOnly) {
+                    request.deny()
+                    return
+                }
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                    request.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
+                } else if (pendingWebPermissionRequest == null) {
+                    pendingWebPermissionRequest = request
+                    (context as? MainActivity)?.requestMicrophonePermission()
+                } else request.deny()
+            }
+
+            override fun onPermissionRequestCanceled(request: PermissionRequest) {
+                if (pendingWebPermissionRequest == request) pendingWebPermissionRequest = null
             }
         }
 
