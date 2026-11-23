@@ -13,7 +13,7 @@ class ChatGPTAccountsApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'دو حساب ChatGPT',
+      title: 'چهار حساب ChatGPT',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF10A37F),
@@ -25,6 +25,47 @@ class ChatGPTAccountsApp extends StatelessWidget {
     );
   }
 }
+
+class _AccountProfile {
+  const _AccountProfile({
+    required this.label,
+    required this.profileName,
+    required this.icon,
+    required this.selectedIcon,
+  });
+
+  final String label;
+  final String profileName;
+  final IconData icon;
+  final IconData selectedIcon;
+}
+
+const List<_AccountProfile> _accountProfiles = [
+  _AccountProfile(
+    label: 'حساب اول',
+    profileName: 'chatgpt_account_one',
+    icon: Icons.person_outline,
+    selectedIcon: Icons.person,
+  ),
+  _AccountProfile(
+    label: 'حساب دوم',
+    profileName: 'chatgpt_account_two',
+    icon: Icons.person_2_outlined,
+    selectedIcon: Icons.person_2,
+  ),
+  _AccountProfile(
+    label: 'حساب سوم',
+    profileName: 'chatgpt_account_three',
+    icon: Icons.account_circle_outlined,
+    selectedIcon: Icons.account_circle,
+  ),
+  _AccountProfile(
+    label: 'حساب چهارم',
+    profileName: 'chatgpt_account_four',
+    icon: Icons.manage_accounts_outlined,
+    selectedIcon: Icons.manage_accounts,
+  ),
+];
 
 class AccountsHomePage extends StatefulWidget {
   const AccountsHomePage({super.key});
@@ -61,7 +102,7 @@ class _AccountsHomePageState extends State<AccountsHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_selectedIndex == 0 ? 'حساب اول' : 'حساب دوم'),
+        title: Text(_accountProfiles[_selectedIndex].label),
         centerTitle: true,
       ),
       body: FutureBuilder<bool>(
@@ -77,36 +118,34 @@ class _AccountsHomePageState extends State<AccountsHomePage> {
 
           return IndexedStack(
             index: _selectedIndex,
-            children: const [
-              _AccountWebView(
-                key: ValueKey('account-one'),
-                profileName: 'chatgpt_account_one',
-              ),
-              _AccountWebView(
-                key: ValueKey('account-two'),
-                profileName: 'chatgpt_account_two',
-              ),
-            ],
+            children: _accountProfiles
+                .map(
+                  (account) => _AccountWebView(
+                    key: ValueKey(account.profileName),
+                    profileName: account.profileName,
+                  ),
+                )
+                .toList(growable: false),
           );
         },
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: (index) {
+          if (index < 0 || index >= _accountProfiles.length) {
+            return;
+          }
           setState(() => _selectedIndex = index);
         },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
-            label: 'حساب اول',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_2_outlined),
-            selectedIcon: Icon(Icons.person_2),
-            label: 'حساب دوم',
-          ),
-        ],
+        destinations: _accountProfiles
+            .map(
+              (account) => NavigationDestination(
+                icon: Icon(account.icon),
+                selectedIcon: Icon(account.selectedIcon),
+                label: account.label,
+              ),
+            )
+            .toList(growable: false),
       ),
     );
   }
@@ -143,7 +182,7 @@ class _UnsupportedProfilesMessage extends StatelessWidget {
         padding: EdgeInsets.all(24),
         child: Text(
           'نسخه WebView این دستگاه از نشست‌های مستقل پشتیبانی نمی‌کند. '
-          'برای جلوگیری از ورود اشتباه یا مشترک شدن دو حساب، صفحه‌ها باز نشدند. '
+          'برای جلوگیری از ورود اشتباه یا مشترک شدن حساب‌ها، صفحه‌ها باز نشدند. '
           'لطفاً Android System WebView یا Chrome را به‌روزرسانی کنید و دوباره برنامه را باز کنید.',
           textAlign: TextAlign.center,
           style: TextStyle(fontSize: 16, height: 1.8),
