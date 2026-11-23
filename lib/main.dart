@@ -164,6 +164,7 @@ class _AccountsHomePageState extends State<AccountsHomePage> {
             )
             .toList(growable: false),
       ),
+      ),
     );
   }
 }
