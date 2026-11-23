@@ -178,7 +178,7 @@ class _WebTabsHomePageState extends State<WebTabsHomePage>
   }
 
   void _selectTab(int index) {
-    if (index < 0 || index > 3 || index == _selectedIndex) return;
+    if (index < 0 || index > 2 || index == _selectedIndex) return;
     setState(() {
       if (index < 3) _webViews[index] ??= _createWebView(index);
       _selectedIndex = index;
@@ -234,8 +234,32 @@ class _WebTabsHomePageState extends State<WebTabsHomePage>
         : 'ذخیره تنظیمات انجام نشد؛ دوباره تلاش کن.');
   }
 
+  void _openSettings() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.82,
+          child: _SettingsPage(
+            nameControllers: _nameControllers,
+            urlControllers: _urlControllers,
+            saving: _saving,
+            microphoneGranted: _microphoneGranted,
+            checkingMicrophone: _checkingMicrophone,
+            onSave: _saveSettings,
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _refreshSelectedTab() async {
-    if (_selectedIndex >= 3) return;
+    if (_selectedIndex > 2) return;
     try {
       await _channel.invokeMethod<bool>('reloadAccount', {
         'profileName': _profileNames[_selectedIndex],
@@ -246,10 +270,6 @@ class _WebTabsHomePageState extends State<WebTabsHomePage>
   }
 
   Future<void> _handleBack() async {
-    if (_selectedIndex >= 3) {
-      _selectTab(0);
-      return;
-    }
     try {
       final wentBack = await _channel.invokeMethod<bool>('handleBack', {
         'profileName': _profileNames[_selectedIndex],
@@ -288,16 +308,20 @@ class _WebTabsHomePageState extends State<WebTabsHomePage>
         child: Scaffold(
           appBar: AppBar(
             title: Text(
-              _selectedIndex == 3 ? 'تنظیمات' : _configs[_selectedIndex].name,
+              _configs[_selectedIndex].name,
             ),
             centerTitle: true,
             actions: [
-              if (_selectedIndex < 3)
-                IconButton(
-                  tooltip: 'بارگذاری دوباره',
-                  onPressed: _refreshSelectedTab,
-                  icon: const Icon(Icons.refresh),
-                ),
+              IconButton(
+                tooltip: 'تنظیمات تب‌ها',
+                onPressed: _openSettings,
+                icon: const Icon(Icons.settings),
+              ),
+              IconButton(
+                tooltip: 'بارگذاری دوباره',
+                onPressed: _refreshSelectedTab,
+                icon: const Icon(Icons.refresh),
+              ),
             ],
           ),
           body: _loading
@@ -309,14 +333,6 @@ class _WebTabsHomePageState extends State<WebTabsHomePage>
                       _profilesSupported
                           ? (_webViews[i] ?? const SizedBox.shrink())
                           : const _UnsupportedProfilesMessage(),
-                    _SettingsPage(
-                      nameControllers: _nameControllers,
-                      urlControllers: _urlControllers,
-                      saving: _saving,
-                      microphoneGranted: _microphoneGranted,
-                      checkingMicrophone: _checkingMicrophone,
-                      onSave: _saveSettings,
-                    ),
                   ],
                 ),
           bottomNavigationBar: NavigationBar(
@@ -328,10 +344,6 @@ class _WebTabsHomePageState extends State<WebTabsHomePage>
                   icon: const Icon(Icons.language),
                   label: _configs[i].name,
                 ),
-              const NavigationDestination(
-                icon: Icon(Icons.settings),
-                label: 'تنظیمات',
-              ),
             ],
           ),
         ),
