@@ -6,6 +6,10 @@ import android.content.Intent
 import android.net.Uri
 import android.content.pm.PackageManager
 import android.view.View
+import android.view.Gravity
+import android.widget.FrameLayout
+import android.widget.ProgressBar
+import android.widget.TextView
 import android.app.AlertDialog
 import android.provider.Settings
 import android.webkit.WebView
@@ -142,7 +146,17 @@ private class ChatGPTWebPlatformView(
     initialUrl: String
 ) : PlatformView {
     private val swipeRefresh = SwipeRefreshLayout(context)
+    private val container = FrameLayout(context)
     private val webView = WebView(context)
+    private val loadingIndicator = ProgressBar(context)
+    private val errorMessage = TextView(context).apply {
+        text = "صفحه بارگذاری نشد. اتصال اینترنت را بررسی کن و برای تلاش دوباره لمس کن."
+        textSize = 15f
+        gravity = Gravity.CENTER
+        setPadding(32, 24, 32, 24)
+        visibility = View.GONE
+        setOnClickListener { webView.reload() }
+    }
 
     init {
         check(WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
@@ -163,8 +177,49 @@ private class ChatGPTWebPlatformView(
         }
 
         webView.webViewClient = object : WebViewClient() {
+            override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
+                loadingIndicator.visibility = View.VISIBLE
+                errorMessage.visibility = View.GONE
+            }
+
             override fun onPageFinished(view: WebView, url: String?) {
                 swipeRefresh.isRefreshing = false
+                loadingIndicator.visibility = View.GONE
+            }
+
+            override fun onReceivedError(
+                view: WebView,
+                request: android.webkit.WebResourceRequest,
+                error: android.webkit.WebResourceError
+            ) {
+                if (request.isForMainFrame) {
+                    swipeRefresh.isRefreshing = false
+                    loadingIndicator.visibility = View.GONE
+                    errorMessage.visibility = View.VISIBLE
+                }
+            }
+
+            override fun onReceivedHttpError(
+                view: WebView,
+                request: android.webkit.WebResourceRequest,
+                errorResponse: android.webkit.WebResourceResponse
+            ) {
+                if (request.isForMainFrame && errorResponse.statusCode >= 500) {
+                    swipeRefresh.isRefreshing = false
+                    loadingIndicator.visibility = View.GONE
+                    errorMessage.visibility = View.VISIBLE
+                }
+            }
+
+            override fun onReceivedSslError(
+                view: WebView,
+                handler: android.webkit.SslErrorHandler,
+                error: android.net.http.SslError
+            ) {
+                handler.cancel()
+                swipeRefresh.isRefreshing = false
+                loadingIndicator.visibility = View.GONE
+                errorMessage.visibility = View.VISIBLE
             }
         }
 
@@ -192,7 +247,21 @@ private class ChatGPTWebPlatformView(
         swipeRefresh.setOnRefreshListener {
             webView.reload()
         }
-        swipeRefresh.addView(webView)
+        container.addView(webView, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        ))
+        container.addView(loadingIndicator, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.CENTER
+        ))
+        container.addView(errorMessage, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.CENTER
+        ))
+        swipeRefresh.addView(container)
         swipeRefresh.setColorSchemeResources(android.R.color.holo_green_dark)
         webViews[profileName] = webView
         webView.loadUrl(initialUrl)
