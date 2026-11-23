@@ -171,12 +171,42 @@ class _AccountsHomePageState extends State<AccountsHomePage> with WidgetsBinding
     } on PlatformException {} on MissingPluginException {}
   }
 
+  Future<void> _refreshSelectedAccount() async {
+    try {
+      await _channel.invokeMethod<bool>('reloadAccount', {
+        'profileName': _accountProfiles[_selectedIndex].profileName,
+      });
+    } on PlatformException {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('رفرش صفحه انجام نشد. دوباره تلاش کن.')),
+        );
+      }
+    } on MissingPluginException {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('قابلیت رفرش در این نسخه در دسترس نیست.')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) => PopScope(
     canPop: false,
     onPopInvoked: (didPop) { if (!didPop) _handleBack(); },
     child: Scaffold(
-      appBar: AppBar(title: Text(_labels[_selectedIndex]), centerTitle: true),
+      appBar: AppBar(
+        title: Text(_labels[_selectedIndex]),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            tooltip: 'رفرش صفحه',
+            onPressed: _refreshSelectedAccount,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           if (!_checkingMicrophone && !_microphoneGranted)
