@@ -429,7 +429,7 @@ class _SettingsPage extends StatelessWidget {
               label: Text(saving ? 'در حال ذخیره...' : 'ذخیره تنظیمات'),
             ),
             const SizedBox(height: 18),
-            const ListTile(
+            ListTile(
               contentPadding: EdgeInsets.zero,
               leading: Icon(Icons.mic),
               title: Text('دسترسی میکروفون'),
