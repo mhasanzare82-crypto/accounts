@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.exm1"
+    namespace = "com.mhasanzare82crypto.chatgptaccounts"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -15,7 +15,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.exm1"
+        applicationId = "com.mhasanzare82crypto.chatgptaccounts"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
