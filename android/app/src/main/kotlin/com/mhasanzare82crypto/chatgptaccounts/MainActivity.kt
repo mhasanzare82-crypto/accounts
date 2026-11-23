@@ -56,6 +56,8 @@ class MainActivity : FlutterActivity() {
                     showMicrophoneSettingsDialog()
                 }
             }
+        } else if (requestCode == 7315) {
+            // Flutter rechecks permission when the activity resumes.
         }
     }
 
@@ -87,6 +89,17 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
+                    "hasMicrophonePermission" -> {
+                        result.success(ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+                    }
+                    "requestMicrophonePermission" -> {
+                        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                            result.success(true)
+                        } else {
+                            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 7315)
+                            result.success(true)
+                        }
+                    }
                     "getAccountLabels" -> {
                         val prefs = getSharedPreferences("account_labels", Context.MODE_PRIVATE)
                         val defaults = arrayOf("حساب ۱", "حساب ۲", "حساب ۳", "حساب ۴")
