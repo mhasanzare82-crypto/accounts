@@ -121,6 +121,14 @@ class _WebTabsHomePageState extends State<WebTabsHomePage>
           for (var i = 0; i < 3; i++) {
             _nameControllers[i].text = loaded[i].name;
             _urlControllers[i].text = loaded[i].url;
+            // The first WebView is created before persisted settings finish loading.
+            // Navigate it to its saved URL so the previous URL is never left visible.
+            if (_webViews[i] != null) {
+              await _channel.invokeMethod<bool>('loadAccountUrl', {
+                'profileName': _profileNames[i],
+                'url': loaded[i].url,
+              });
+            }
           }
         }
       }
