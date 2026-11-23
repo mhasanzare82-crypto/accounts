@@ -15,7 +15,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.mhasanzare82crypto.chatgptaccounts"
+        applicationId = "com.mhasanzare82crypto.chatgptaccounts.multiple"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
