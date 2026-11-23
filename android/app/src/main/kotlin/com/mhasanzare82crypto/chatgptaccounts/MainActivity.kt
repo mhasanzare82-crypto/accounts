@@ -4,6 +4,7 @@ import android.content.Context
 import android.view.View
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import io.flutter.embedding.android.FlutterActivity
@@ -27,10 +28,12 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
-                    "isMultiProfileSupported" -> {
-                        result.success(
-                            WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)
-                        )
+                    "isMultiProfileSupported" -> result.success(
+                        WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)
+                    )
+                    "handleBack" -> {
+                        val profileName = call.argument<String>("profileName")
+                        result.success(profileName?.let { ChatGPTWebPlatformView.goBack(it) } ?: false)
                     }
                     else -> result.notImplemented()
                 }
@@ -50,16 +53,17 @@ private class ChatGPTWebViewFactory : PlatformViewFactory(StandardMessageCodec.I
 
 private class ChatGPTWebPlatformView(
     context: Context,
-    profileName: String,
+    private val profileName: String,
     initialUrl: String
 ) : PlatformView {
-    private val webView: WebView = WebView(context)
+    private val swipeRefresh = SwipeRefreshLayout(context)
+    private val webView = WebView(context)
 
     init {
         check(WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
             "This Android System WebView does not support independent profiles."
         }
-        // This must happen before changing settings, attaching, or loading the WebView.
+        // Set the isolated profile before settings, attachment, or navigation.
         WebViewCompat.setProfile(webView, profileName)
 
         webView.settings.javaScriptEnabled = true
@@ -68,23 +72,47 @@ private class ChatGPTWebPlatformView(
         webView.settings.loadsImagesAutomatically = true
         webView.settings.javaScriptCanOpenWindowsAutomatically = true
 
-        // Use this profile's cookie manager rather than the shared default manager.
         WebViewCompat.getProfile(webView).cookieManager.apply {
             setAcceptCookie(true)
             setAcceptThirdPartyCookies(webView, true)
         }
 
-        webView.webViewClient = WebViewClient()
+        webView.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView, url: String?) {
+                swipeRefresh.isRefreshing = false
+            }
+        }
+
+        swipeRefresh.setOnRefreshListener {
+            webView.reload()
+        }
+        swipeRefresh.addView(webView)
+        swipeRefresh.setColorSchemeResources(android.R.color.holo_green_dark)
+        webViews[profileName] = webView
         webView.loadUrl(initialUrl)
     }
 
-    override fun getView(): View = webView
+    override fun getView(): View = swipeRefresh
 
     override fun dispose() {
+        swipeRefresh.setOnRefreshListener(null)
         webView.stopLoading()
         webView.loadUrl("about:blank")
         webView.clearHistory()
         webView.removeAllViews()
         webView.destroy()
+        webViews.remove(profileName)
+        swipeRefresh.removeAllViews()
+    }
+
+    companion object {
+        private val webViews = mutableMapOf<String, WebView>()
+
+        fun goBack(profileName: String): Boolean {
+            val view = webViews[profileName] ?: return false
+            if (!view.canGoBack()) return false
+            view.goBack()
+            return true
+        }
     }
 }
