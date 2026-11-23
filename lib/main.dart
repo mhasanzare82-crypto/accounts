@@ -2,32 +2,264 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-void main() { WidgetsFlutterBinding.ensureInitialized(); runApp(const ChatGPTAccountsApp()); }
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const ChatGPTAccountsApp());
+}
+
 class ChatGPTAccountsApp extends StatelessWidget {
- const ChatGPTAccountsApp({super.key});
- @override Widget build(BuildContext context) => MaterialApp(debugShowCheckedModeBanner:false,title:'accounts',theme:ThemeData(colorScheme:ColorScheme.fromSeed(seedColor:const Color(0xFF10A37F),brightness:Brightness.light),useMaterial3:true),home:const AccountsHomePage());
+  const ChatGPTAccountsApp({super.key});
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    debugShowCheckedModeBanner: false,
+    title: 'accounts',
+    theme: ThemeData(
+      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF10A37F), brightness: Brightness.light),
+      useMaterial3: true,
+    ),
+    home: const AccountsHomePage(),
+  );
 }
-class _AccountProfile { const _AccountProfile({required this.profileName,required this.defaultLabel}); final String profileName; final String defaultLabel; }
-const _accountProfiles=[
- _AccountProfile(profileName:'chatgpt_account_one',defaultLabel:'حساب ۱'),
- _AccountProfile(profileName:'chatgpt_account_two',defaultLabel:'حساب ۲'),
- _AccountProfile(profileName:'chatgpt_account_three',defaultLabel:'حساب ۳'),
- _AccountProfile(profileName:'chatgpt_account_four',defaultLabel:'حساب ۴'),
+
+class _AccountProfile {
+  const _AccountProfile({required this.profileName, required this.defaultLabel});
+  final String profileName;
+  final String defaultLabel;
+}
+const _accountProfiles = [
+  _AccountProfile(profileName: 'chatgpt_account_one', defaultLabel: 'حساب ۱'),
+  _AccountProfile(profileName: 'chatgpt_account_two', defaultLabel: 'حساب ۲'),
+  _AccountProfile(profileName: 'chatgpt_account_three', defaultLabel: 'حساب ۳'),
+  _AccountProfile(profileName: 'chatgpt_account_four', defaultLabel: 'حساب ۴'),
 ];
-class AccountsHomePage extends StatefulWidget { const AccountsHomePage({super.key}); @override State<AccountsHomePage> createState()=>_AccountsHomePageState(); }
-class _AccountsHomePageState extends State<AccountsHomePage>{
- static const _channel=MethodChannel('com.example.chatgpt_accounts/profiles');
- late final Future<bool> _profilesSupported; int _selectedIndex=0;
- List<String> _labels=_accountProfiles.map((a)=>a.defaultLabel).toList();
- @override void initState(){super.initState();_profilesSupported=_checkProfileSupport();_loadLabels();}
- Future<void> _loadLabels()async{try{final saved=await _channel.invokeMethod<List<dynamic>>('getAccountLabels');if(saved!=null&&saved.length==4){final names=saved.map((e)=>e.toString().trim()).toList();if(names.every((e)=>e.isNotEmpty)&&mounted)setState(()=>_labels=names);}}catch(_){}}
- Future<void> _saveLabels()async{try{await _channel.invokeMethod<void>('saveAccountLabels',{'labels':_labels});}catch(_){}}
- Future<void> _rename(int i)async{final ctl=TextEditingController(text:_labels[i]);final name=await showDialog<String>(context:context,builder:(ctx)=>AlertDialog(title:const Text('تغییر نام حساب'),content:TextField(controller:ctl,autofocus:true,maxLength:30,textDirection:TextDirection.rtl,decoration:const InputDecoration(labelText:'نام حساب'),onSubmitted:(v){if(v.trim().isNotEmpty)Navigator.pop(ctx,v.trim());}),actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('لغو')),FilledButton(onPressed:(){if(ctl.text.trim().isNotEmpty)Navigator.pop(ctx,ctl.text.trim());},child:const Text('ذخیره'))]));ctl.dispose();if(name==null||name.trim().isEmpty||!mounted)return;setState(()=>_labels[i]=name.trim());await _saveLabels();}
- Future<bool> _checkProfileSupport()async{try{return await _channel.invokeMethod<bool>('isMultiProfileSupported')??false;}on PlatformException{return false;}on MissingPluginException{return false;}}
- Future<void> _handleBack()async{try{await _channel.invokeMethod<bool>('handleBack',{'profileName':_accountProfiles[_selectedIndex].profileName});}on PlatformException{}on MissingPluginException{}}
- @override Widget build(BuildContext context)=>PopScope(canPop:false,onPopInvoked:(didPop){if(!didPop)_handleBack();},child:Scaffold(appBar:AppBar(title:Text(_labels[_selectedIndex]),centerTitle:true),body:FutureBuilder<bool>(future:_profilesSupported,builder:(context,s){if(s.connectionState!=ConnectionState.done)return const Center(child:CircularProgressIndicator());if(s.data!=true)return const _UnsupportedProfilesMessage();return IndexedStack(index:_selectedIndex,children:_accountProfiles.map((a)=>_AccountWebView(key:ValueKey(a.profileName),profileName:a.profileName)).toList(growable:false));}),bottomNavigationBar:NavigationBar(selectedIndex:_selectedIndex,onDestinationSelected:(i){if(i>=0&&i<4)setState(()=>_selectedIndex=i);},destinations:List.generate(4,(i)=>NavigationDestination(icon:_HoldRenameIcon(onRename:()=>_rename(i)),selectedIcon:_HoldRenameIcon(onRename:()=>_rename(i)),label:_labels[i])))));
+
+class AccountsHomePage extends StatefulWidget {
+  const AccountsHomePage({super.key});
+  @override
+  State<AccountsHomePage> createState() => _AccountsHomePageState();
 }
-class _HoldRenameIcon extends StatefulWidget{const _HoldRenameIcon({required this.onRename});final VoidCallback onRename;@override State<_HoldRenameIcon> createState()=>_HoldRenameIconState();}
-class _HoldRenameIconState extends State<_HoldRenameIcon>{Timer? _timer;void _down(PointerDownEvent e){_timer?.cancel();_timer=Timer(const Duration(seconds:3),widget.onRename);}void _cancel(PointerEvent e){_timer?.cancel();_timer=null;}@override void dispose(){_timer?.cancel();super.dispose();}@override Widget build(BuildContext context)=>Listener(onPointerDown:_down,onPointerUp:_cancel,onPointerCancel:_cancel,child:const Icon(Icons.account_circle));}
-class _AccountWebView extends StatelessWidget{const _AccountWebView({super.key,required this.profileName});final String profileName;@override Widget build(BuildContext context)=>AndroidView(viewType:'chatgpt/accounts_webview',creationParams:<String,String>{'profileName':profileName,'initialUrl':'https://chatgpt.com/'},creationParamsCodec:const StandardMessageCodec());}
-class _UnsupportedProfilesMessage extends StatelessWidget{const _UnsupportedProfilesMessage();@override Widget build(BuildContext context)=>const Center(child:Padding(padding:EdgeInsets.all(24),child:Text('نسخه WebView این دستگاه از نشست‌های مستقل پشتیبانی نمی‌کند. برای جلوگیری از ورود اشتباه یا مشترک شدن حساب‌ها، صفحه‌ها باز نشدند. لطفاً Android System WebView یا Chrome را به‌روزرسانی کنید و دوباره برنامه را باز کنید.',textAlign:TextAlign.center,style:TextStyle(fontSize:16,height:1.8))));}
+class _AccountsHomePageState extends State<AccountsHomePage> {
+  static const _channel = MethodChannel('com.example.chatgpt_accounts/profiles');
+  late final Future<bool> _profilesSupported;
+  int _selectedIndex = 0;
+  List<String> _labels = _accountProfiles.map((a) => a.defaultLabel).toList();
+
+  @override
+  void initState() {
+    super.initState();
+    _profilesSupported = _checkProfileSupport();
+    _loadLabels();
+  }
+
+  Future<void> _loadLabels() async {
+    try {
+      final saved = await _channel.invokeMethod<List<dynamic>>('getAccountLabels');
+      if (saved != null && saved.length == 4) {
+        final names = saved.map((e) => e.toString().trim()).toList();
+        if (names.every((e) => e.isNotEmpty) && mounted) setState(() => _labels = names);
+      }
+    } catch (_) {}
+  }
+
+  Future<bool> _saveLabels(List<String> labels) async {
+    try {
+      return await _channel.invokeMethod<bool>('saveAccountLabels', {'labels': labels}) ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _rename(int i) async {
+    final ctl = TextEditingController(text: _labels[i]);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('تغییر نام حساب'),
+        content: TextField(
+          controller: ctl,
+          autofocus: true,
+          maxLength: 30,
+          textDirection: TextDirection.rtl,
+          decoration: const InputDecoration(labelText: 'نام حساب'),
+          onSubmitted: (v) { if (v.trim().isNotEmpty) Navigator.pop(ctx, v.trim()); },
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('لغو')),
+          FilledButton(onPressed: () { if (ctl.text.trim().isNotEmpty) Navigator.pop(ctx, ctl.text.trim()); }, child: const Text('ذخیره')),
+        ],
+      ),
+    );
+    ctl.dispose();
+    if (name == null || name.trim().isEmpty || !mounted) return;
+    final updated = List<String>.from(_labels)..[i] = name.trim();
+    final saved = await _saveLabels(updated);
+    if (!mounted) return;
+    if (saved) {
+      setState(() => _labels = updated);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ذخیره نام حساب انجام نشد؛ دوباره تلاش کن.')));
+    }
+  }
+
+  Future<bool> _checkProfileSupport() async {
+    try {
+      return await _channel.invokeMethod<bool>('isMultiProfileSupported') ?? false;
+    } on PlatformException { return false; } on MissingPluginException { return false; }
+  }
+
+  Future<void> _handleBack() async {
+    try {
+      await _channel.invokeMethod<bool>('handleBack', {'profileName': _accountProfiles[_selectedIndex].profileName});
+    } on PlatformException {} on MissingPluginException {}
+  }
+
+  @override
+  Widget build(BuildContext context) => PopScope(
+    canPop: false,
+    onPopInvoked: (didPop) { if (!didPop) _handleBack(); },
+    child: Scaffold(
+      appBar: AppBar(title: Text(_labels[_selectedIndex]), centerTitle: true),
+      body: FutureBuilder<bool>(
+        future: _profilesSupported,
+        builder: (context, s) {
+          if (s.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+          if (s.data != true) return const _UnsupportedProfilesMessage();
+          return IndexedStack(
+            index: _selectedIndex,
+            children: _accountProfiles.map((a) => _AccountWebView(key: ValueKey(a.profileName), profileName: a.profileName)).toList(growable: false),
+          );
+        },
+      ),
+      bottomNavigationBar: _AccountNavigationBar(
+        labels: _labels,
+        selectedIndex: _selectedIndex,
+        onSelect: (i) => setState(() => _selectedIndex = i),
+        onRename: _rename,
+      ),
+    ),
+  );
+}
+
+class _AccountNavigationBar extends StatelessWidget {
+  const _AccountNavigationBar({required this.labels, required this.selectedIndex, required this.onSelect, required this.onRename});
+  final List<String> labels;
+  final int selectedIndex;
+  final ValueChanged<int> onSelect;
+  final ValueChanged<int> onRename;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Theme.of(context).colorScheme.surface,
+    elevation: 3,
+    child: SafeArea(
+      top: false,
+      child: SizedBox(
+        height: 68,
+        child: Row(
+          children: List.generate(4, (i) => Expanded(
+            child: _AccountNavigationItem(
+              label: labels[i],
+              selected: selectedIndex == i,
+              onSelect: () => onSelect(i),
+              onRename: () => onRename(i),
+            ),
+          )),
+        ),
+      ),
+    ),
+  );
+}
+
+class _AccountNavigationItem extends StatefulWidget {
+  const _AccountNavigationItem({required this.label, required this.selected, required this.onSelect, required this.onRename});
+  final String label;
+  final bool selected;
+  final VoidCallback onSelect;
+  final VoidCallback onRename;
+  @override
+  State<_AccountNavigationItem> createState() => _AccountNavigationItemState();
+}
+class _AccountNavigationItemState extends State<_AccountNavigationItem> {
+  Timer? _holdTimer;
+  bool _renamedByHold = false;
+
+  void _pointerDown(PointerDownEvent event) {
+    _holdTimer?.cancel();
+    _renamedByHold = false;
+    _holdTimer = Timer(const Duration(seconds: 3), () {
+      _renamedByHold = true;
+      widget.onRename();
+    });
+  }
+
+  void _pointerUp(PointerEvent event) {
+    _holdTimer?.cancel();
+    _holdTimer = null;
+    if (!_renamedByHold) widget.onSelect();
+  }
+
+  void _pointerCancel(PointerEvent event) {
+    _holdTimer?.cancel();
+    _holdTimer = null;
+  }
+
+  @override
+  void dispose() {
+    _holdTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final color = widget.selected ? colorScheme.primary : colorScheme.onSurfaceVariant;
+    return Listener(
+      onPointerDown: _pointerDown,
+      onPointerUp: _pointerUp,
+      onPointerCancel: _pointerCancel,
+      child: Semantics(
+        button: true,
+        label: widget.label,
+        child: SizedBox.expand(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 7),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.account_circle, size: 24, color: color),
+                const SizedBox(height: 3),
+                Text(widget.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: color)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AccountWebView extends StatelessWidget {
+  const _AccountWebView({super.key, required this.profileName});
+  final String profileName;
+  @override
+  Widget build(BuildContext context) => AndroidView(
+    viewType: 'chatgpt/accounts_webview',
+    creationParams: <String, String>{'profileName': profileName, 'initialUrl': 'https://chatgpt.com/'},
+    creationParamsCodec: const StandardMessageCodec(),
+  );
+}
+
+class _UnsupportedProfilesMessage extends StatelessWidget {
+  const _UnsupportedProfilesMessage();
+  @override
+  Widget build(BuildContext context) => const Center(
+    child: Padding(
+      padding: EdgeInsets.all(24),
+      child: Text(
+        'نسخه WebView این دستگاه از نشست‌های مستقل پشتیبانی نمی‌کند. برای جلوگیری از ورود اشتباه یا مشترک شدن حساب‌ها، صفحه‌ها باز نشدند. لطفاً Android System WebView یا Chrome را به‌روزرسانی کنید و دوباره برنامه را باز کنید.',
+        textAlign: TextAlign.center,
+        style: TextStyle(fontSize: 16, height: 1.8),
+      ),
+    ),
+  );
+}
