@@ -282,7 +282,7 @@ class _WebTabsHomePageState extends State<WebTabsHomePage>
   @override
   Widget build(BuildContext context) => PopScope(
         canPop: false,
-        onPopInvoked: (didPop) {
+        onPopInvokedWithResult: (didPop, result) {
           if (!didPop) _handleBack();
         },
         child: Scaffold(
@@ -313,6 +313,8 @@ class _WebTabsHomePageState extends State<WebTabsHomePage>
                       nameControllers: _nameControllers,
                       urlControllers: _urlControllers,
                       saving: _saving,
+                      microphoneGranted: _microphoneGranted,
+                      checkingMicrophone: _checkingMicrophone,
                       onSave: _saveSettings,
                     ),
                   ],
@@ -341,12 +343,16 @@ class _SettingsPage extends StatelessWidget {
     required this.nameControllers,
     required this.urlControllers,
     required this.saving,
+    required this.microphoneGranted,
+    required this.checkingMicrophone,
     required this.onSave,
   });
 
   final List<TextEditingController> nameControllers;
   final List<TextEditingController> urlControllers;
   final bool saving;
+  final bool microphoneGranted;
+  final bool checkingMicrophone;
   final VoidCallback onSave;
 
   @override
@@ -416,7 +422,11 @@ class _SettingsPage extends StatelessWidget {
               leading: Icon(Icons.mic),
               title: Text('دسترسی میکروفون'),
               subtitle: Text(
-                'هر سه صفحه می‌توانند درخواست میکروفون بدهند. دسترسی فقط برای صفحات HTTPS و پس از تأیید مجوز اندروید و درخواست سایت برقرار می‌شود.',
+                checkingMicrophone
+                    ? 'در حال بررسی مجوز میکروفون...'
+                    : microphoneGranted
+                        ? 'مجوز میکروفون اندروید فعال است. هر سه صفحه HTTPS می‌توانند پس از درخواست سایت از میکروفون استفاده کنند.'
+                        : 'مجوز میکروفون هنوز فعال نیست. هنگام درخواست یک صفحه HTTPS، اندروید برای تأیید دسترسی از تو اجازه می‌گیرد.',
               ),
             ),
           ],
