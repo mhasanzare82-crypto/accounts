@@ -36,7 +36,8 @@ kotlin {
 }
 
 dependencies {
-    implementation("androidx.webkit:webkit:1.14.0")\n    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.2.0")
+    implementation("androidx.webkit:webkit:1.14.0")
+    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.2.0")
 }
 
 flutter {
