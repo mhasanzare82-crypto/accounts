@@ -63,6 +63,19 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
+                    "getAccountLabels" -> {
+                        val prefs = getSharedPreferences("account_labels", Context.MODE_PRIVATE)
+                        val defaults = arrayOf("حساب ۱", "حساب ۲", "حساب ۳", "حساب ۴")
+                        result.success((0..3).map { prefs.getString("label_$it", defaults[it]) ?: defaults[it] })
+                    }
+                    "saveAccountLabels" -> {
+                        val labels = call.argument<List<String>>("labels")
+                        if (labels != null && labels.size == 4 && labels.all { it.trim().isNotEmpty() }) {
+                            val prefs = getSharedPreferences("account_labels", Context.MODE_PRIVATE).edit()
+                            labels.forEachIndexed { index, label -> prefs.putString("label_$index", label.trim()) }
+                            result.success(prefs.commit())
+                        } else result.success(false)
+                    }
                     "isMultiProfileSupported" -> result.success(
                         WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)
                     )
