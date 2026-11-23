@@ -38,17 +38,52 @@ class AccountsHomePage extends StatefulWidget {
   @override
   State<AccountsHomePage> createState() => _AccountsHomePageState();
 }
-class _AccountsHomePageState extends State<AccountsHomePage> {
+class _AccountsHomePageState extends State<AccountsHomePage> with WidgetsBindingObserver {
   static const _channel = MethodChannel('com.example.chatgpt_accounts/profiles');
   late final Future<bool> _profilesSupported;
   int _selectedIndex = 0;
   List<String> _labels = _accountProfiles.map((a) => a.defaultLabel).toList();
+  bool _microphoneGranted = false;
+  bool _checkingMicrophone = true;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _profilesSupported = _checkProfileSupport();
     _loadLabels();
+    _refreshMicrophonePermission();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refreshMicrophonePermission();
+  }
+
+  Future<void> _refreshMicrophonePermission() async {
+    try {
+      final granted = await _channel.invokeMethod<bool>('hasMicrophonePermission') ?? false;
+      if (mounted) setState(() { _microphoneGranted = granted; _checkingMicrophone = false; });
+    } catch (_) {
+      if (mounted) setState(() => _checkingMicrophone = false);
+    }
+  }
+
+  Future<void> _requestMicrophonePermission() async {
+    try {
+      await _channel.invokeMethod<void>('requestMicrophonePermission');
+    } on PlatformException {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('درخواست مجوز میکروفون انجام نشد.')));
+    } on MissingPluginException {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('امکان درخواست مجوز در این نسخه وجود ندارد.')));
+    }
+    await _refreshMicrophonePermission();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   Future<void> _loadLabels() async {
@@ -119,16 +154,47 @@ class _AccountsHomePageState extends State<AccountsHomePage> {
     onPopInvoked: (didPop) { if (!didPop) _handleBack(); },
     child: Scaffold(
       appBar: AppBar(title: Text(_labels[_selectedIndex]), centerTitle: true),
-      body: FutureBuilder<bool>(
-        future: _profilesSupported,
-        builder: (context, s) {
-          if (s.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
-          if (s.data != true) return const _UnsupportedProfilesMessage();
-          return IndexedStack(
-            index: _selectedIndex,
-            children: _accountProfiles.map((a) => _AccountWebView(key: ValueKey(a.profileName), profileName: a.profileName)).toList(growable: false),
-          );
-        },
+      body: Column(
+        children: [
+          if (!_checkingMicrophone && !_microphoneGranted)
+            Material(
+              color: Theme.of(context).colorScheme.secondaryContainer,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+                child: Row(
+                  children: [
+                    const Icon(Icons.mic_none),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'برای استفاده از قابلیت گفت‌وگوی صوتی، مجوز میکروفون را فعال کن.',
+                        textDirection: TextDirection.rtl,
+                        style: TextStyle(height: 1.5),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: _requestMicrophonePermission,
+                      child: const Text('فعال‌سازی'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          Expanded(
+            child: FutureBuilder<bool>(
+              future: _profilesSupported,
+              builder: (context, s) {
+                if (s.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+                if (s.data != true) return const _UnsupportedProfilesMessage();
+                return IndexedStack(
+                  index: _selectedIndex,
+                  children: _accountProfiles.map((a) => _AccountWebView(key: ValueKey(a.profileName), profileName: a.profileName)).toList(growable: false),
+                );
+              },
+            ),
+          ),
+        ],
       ),
       bottomNavigationBar: _AccountNavigationBar(
         labels: _labels,
