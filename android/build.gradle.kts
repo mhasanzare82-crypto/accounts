@@ -1,6 +1,10 @@
 allprojects {
     repositories {
         google()
+        maven {
+            name = "GoogleMavenCentralMirrorEU"
+            url = uri("https://maven-central-eu.storage-download.googleapis.com/maven2/")
+        }
         mavenCentral()
     }
 }
@@ -12,6 +16,7 @@ subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
+
 subprojects {
     project.evaluationDependsOn(":app")
 }
