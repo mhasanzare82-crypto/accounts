@@ -1,21 +1,23 @@
 package com.mhasanzare82crypto.chatgptaccounts
 
 import android.Manifest
+import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.content.pm.PackageManager
-import android.view.View
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import android.view.Gravity
+import android.view.View
+import android.webkit.PermissionRequest
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.ProgressBar
 import android.widget.TextView
-import android.app.AlertDialog
-import android.provider.Settings
-import android.webkit.WebView
-import android.webkit.WebChromeClient
-import android.webkit.PermissionRequest
-import android.webkit.WebViewClient
 import androidx.core.content.ContextCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
@@ -37,49 +39,59 @@ class MainActivity : FlutterActivity() {
             return
         }
         pendingWebPermissionRequest = request
-        requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), microphonePermissionRequestCode)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+            shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)
+        ) {
+            AlertDialog.Builder(this)
+                .setTitle("اجازه استفاده از میکروفون")
+                .setMessage("صفحه وب برای قابلیت صوتی به میکروفون نیاز دارد. آیا اجازه می‌دهی؟")
+                .setNegativeButton("رد کردن") { _, _ ->
+                    pendingWebPermissionRequest?.deny()
+                    pendingWebPermissionRequest = null
+                }
+                .setPositiveButton("اجازه دادن") { _, _ ->
+                    requestPermissions(
+                        arrayOf(Manifest.permission.RECORD_AUDIO),
+                        microphonePermissionRequestCode
+                    )
+                }
+                .setOnCancelListener {
+                    pendingWebPermissionRequest?.deny()
+                    pendingWebPermissionRequest = null
+                }
+                .show()
+        } else {
+            requestPermissions(
+                arrayOf(Manifest.permission.RECORD_AUDIO),
+                microphonePermissionRequestCode
+            )
+        }
     }
 
-    fun cancelWebMicrophonePermissionRequest(request: PermissionRequest): Boolean {
-        if (pendingWebPermissionRequest != request) return false
-        pendingWebPermissionRequest = null
-        return true
+    fun cancelWebMicrophonePermissionRequest(request: PermissionRequest) {
+        if (pendingWebPermissionRequest == request) pendingWebPermissionRequest = null
     }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == microphonePermissionRequestCode) {
             val request = pendingWebPermissionRequest
             pendingWebPermissionRequest = null
             if (request != null) {
-                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                if (grantResults.isNotEmpty() &&
+                    grantResults[0] == PackageManager.PERMISSION_GRANTED
+                ) {
                     request.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
                 } else {
                     request.deny()
-                    showMicrophoneSettingsDialog()
                 }
             }
-        } else if (requestCode == 7315) {
-            // Flutter rechecks permission when the activity resumes.
         }
     }
-
-    private fun showMicrophoneSettingsDialog() {
-        runOnUiThread {
-            AlertDialog.Builder(this)
-                .setTitle("مجوز میکروفون لازم است")
-                .setMessage("برای استفاده از میکروفون در ChatGPT، مجوز میکروفون برنامه را فعال کن. می‌توانی وارد تنظیمات برنامه شوی و دسترسی میکروفون را بدهی.")
-                .setNegativeButton("بعداً", null)
-                .setPositiveButton("رفتن به تنظیمات") { _, _ ->
-                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                        data = Uri.fromParts("package", packageName, null)
-                    }
-                    startActivity(intent)
-                }
-                .show()
-        }
-    }
-
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -93,43 +105,88 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "hasMicrophonePermission" -> {
-                        result.success(ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+                        result.success(
+                            ContextCompat.checkSelfPermission(
+                                this,
+                                Manifest.permission.RECORD_AUDIO
+                            ) == PackageManager.PERMISSION_GRANTED
+                        )
                     }
-                    "requestMicrophonePermission" -> {
-                        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                            result.success(true)
+                    "isMultiProfileSupported" -> {
+                        result.success(
+                            WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)
+                        )
+                    }
+                    "getTabConfigs" -> {
+                        val prefs = getSharedPreferences("web_tab_configs", Context.MODE_PRIVATE)
+                        val defaults = listOf(
+                            "صفحه اول" to "https://chatgpt.com/",
+                            "صفحه دوم" to "https://chatgpt.com/",
+                            "صفحه سوم" to "https://chatgpt.com/"
+                        )
+                        result.success(defaults.mapIndexed { index, pair ->
+                            mapOf(
+                                "name" to (prefs.getString("name_$index", pair.first) ?: pair.first),
+                                "url" to (prefs.getString("url_$index", pair.second) ?: pair.second)
+                            )
+                        })
+                    }
+                    "saveTabConfigs" -> {
+                        val tabs = call.argument<List<Map<String, String>>>("tabs")
+                        val valid = tabs != null && tabs.size == 3 && tabs.all { tab ->
+                            val name = tab["name"]?.trim().orEmpty()
+                            val url = tab["url"]?.trim().orEmpty()
+                            name.isNotEmpty() && isAllowedHttpsUrl(url)
+                        }
+                        if (!valid || tabs == null) {
+                            result.success(false)
                         } else {
-                            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 7315)
-                            result.success(true)
+                            val editor = getSharedPreferences(
+                                "web_tab_configs",
+                                Context.MODE_PRIVATE
+                            ).edit()
+                            tabs.forEachIndexed { index, tab ->
+                                editor.putString("name_$index", tab["name"]!!.trim())
+                                editor.putString("url_$index", Uri.parse(tab["url"]!!.trim()).toString())
+                            }
+                            result.success(editor.commit())
                         }
                     }
-                    "getAccountLabels" -> {
-                        val prefs = getSharedPreferences("account_labels", Context.MODE_PRIVATE)
-                        val defaults = arrayOf("حساب ۱", "حساب ۲", "حساب ۳", "حساب ۴")
-                        result.success((0..3).map { prefs.getString("label_$it", defaults[it]) ?: defaults[it] })
+                    "loadAccountUrl" -> {
+                        val profileName = call.argument<String>("profileName")
+                        val url = call.argument<String>("url")
+                        result.success(
+                            profileName != null && url != null &&
+                                isAllowedHttpsUrl(url) &&
+                                ChatGPTWebPlatformView.loadUrl(profileName, url)
+                        )
                     }
-                    "saveAccountLabels" -> {
-                        val labels = call.argument<List<String>>("labels")
-                        if (labels != null && labels.size == 4 && labels.all { it.trim().isNotEmpty() }) {
-                            val prefs = getSharedPreferences("account_labels", Context.MODE_PRIVATE).edit()
-                            labels.forEachIndexed { index, label -> prefs.putString("label_$index", label.trim()) }
-                            result.success(prefs.commit())
-                        } else result.success(false)
-                    }
-                    "isMultiProfileSupported" -> result.success(
-                        WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)
-                    )
                     "handleBack" -> {
                         val profileName = call.argument<String>("profileName")
-                        result.success(profileName?.let { ChatGPTWebPlatformView.goBack(it) } ?: false)
+                        result.success(
+                            profileName?.let { ChatGPTWebPlatformView.goBack(it) } ?: false
+                        )
                     }
                     "reloadAccount" -> {
                         val profileName = call.argument<String>("profileName")
-                        result.success(profileName?.let { ChatGPTWebPlatformView.reload(it) } ?: false)
+                        result.success(
+                            profileName?.let { ChatGPTWebPlatformView.reload(it) } ?: false
+                        )
                     }
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    private fun isAllowedHttpsUrl(value: String): Boolean {
+        return try {
+            val uri = Uri.parse(value.trim())
+            uri.scheme.equals("https", ignoreCase = true) &&
+                !uri.host.isNullOrBlank() &&
+                uri.userInfo.isNullOrEmpty()
+        } catch (_: Exception) {
+            false
+        }
     }
 }
 
@@ -138,7 +195,11 @@ private class ChatGPTWebViewFactory : PlatformViewFactory(StandardMessageCodec.I
         val parameters = args as? Map<*, *> ?: error("Missing WebView parameters")
         val profileName = parameters["profileName"] as? String
             ?: error("Missing WebView profile name")
-        val initialUrl = parameters["initialUrl"] as? String ?: "https://chatgpt.com/"
+        val initialUrl = parameters["initialUrl"] as? String
+            ?: "https://chatgpt.com/"
+        require(initialUrl.startsWith("https://", ignoreCase = true)) {
+            "Only HTTPS URLs are allowed."
+        }
         return ChatGPTWebPlatformView(context, profileName, initialUrl)
     }
 }
@@ -164,7 +225,6 @@ private class ChatGPTWebPlatformView(
         check(WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
             "This Android System WebView does not support independent profiles."
         }
-        // Set the isolated profile before settings, attachment, or navigation.
         WebViewCompat.setProfile(webView, profileName)
 
         webView.settings.javaScriptEnabled = true
@@ -179,7 +239,19 @@ private class ChatGPTWebPlatformView(
         }
 
         webView.webViewClient = object : WebViewClient() {
-            override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
+            override fun shouldOverrideUrlLoading(
+                view: WebView,
+                request: WebResourceRequest
+            ): Boolean {
+                // Refuse insecure top-level navigation and redirects.
+                return request.url.scheme != "https"
+            }
+
+            override fun onPageStarted(
+                view: WebView,
+                url: String?,
+                favicon: android.graphics.Bitmap?
+            ) {
                 loadingIndicator.visibility = View.VISIBLE
                 errorMessage.visibility = View.GONE
             }
@@ -190,21 +262,10 @@ private class ChatGPTWebPlatformView(
 
             override fun onReceivedError(
                 view: WebView,
-                request: android.webkit.WebResourceRequest,
+                request: WebResourceRequest,
                 error: android.webkit.WebResourceError
             ) {
                 if (request.isForMainFrame) {
-                    loadingIndicator.visibility = View.GONE
-                    errorMessage.visibility = View.VISIBLE
-                }
-            }
-
-            override fun onReceivedHttpError(
-                view: WebView,
-                request: android.webkit.WebResourceRequest,
-                errorResponse: android.webkit.WebResourceResponse
-            ) {
-                if (request.isForMainFrame && errorResponse.statusCode >= 500) {
                     loadingIndicator.visibility = View.GONE
                     errorMessage.visibility = View.VISIBLE
                 }
@@ -223,17 +284,25 @@ private class ChatGPTWebPlatformView(
 
         webView.webChromeClient = object : WebChromeClient() {
             override fun onPermissionRequest(request: PermissionRequest) {
-                val host = request.origin.host
-                val trustedOrigin = host == "chatgpt.com" || host?.endsWith(".chatgpt.com") == true
-                val audioOnly = request.resources.size == 1 && request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)
-                if (!trustedOrigin || !audioOnly) {
+                val secureOrigin = request.origin.scheme.equals("https", ignoreCase = true) &&
+                    !request.origin.host.isNullOrBlank()
+                val audioOnly = request.resources.size == 1 &&
+                    request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)
+
+                if (!secureOrigin || !audioOnly) {
                     request.deny()
                     return
                 }
-                if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+
+                if (ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.RECORD_AUDIO
+                    ) == PackageManager.PERMISSION_GRANTED
+                ) {
                     request.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
                 } else {
-                    (context as? MainActivity)?.requestWebMicrophonePermission(request) ?: request.deny()
+                    (context as? MainActivity)?.requestWebMicrophonePermission(request)
+                        ?: request.deny()
                 }
             }
 
@@ -242,20 +311,29 @@ private class ChatGPTWebPlatformView(
             }
         }
 
-        container.addView(webView, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            FrameLayout.LayoutParams.MATCH_PARENT
-        ))
-        container.addView(loadingIndicator, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.WRAP_CONTENT,
-            FrameLayout.LayoutParams.WRAP_CONTENT,
-            Gravity.CENTER
-        ))
-        container.addView(errorMessage, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            FrameLayout.LayoutParams.WRAP_CONTENT,
-            Gravity.CENTER
-        ))
+        container.addView(
+            webView,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        )
+        container.addView(
+            loadingIndicator,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER
+            )
+        )
+        container.addView(
+            errorMessage,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER
+            )
+        )
         webViews[profileName] = webView
         webView.loadUrl(initialUrl)
     }
@@ -273,6 +351,12 @@ private class ChatGPTWebPlatformView(
 
     companion object {
         private val webViews = mutableMapOf<String, WebView>()
+
+        fun loadUrl(profileName: String, url: String): Boolean {
+            val view = webViews[profileName] ?: return false
+            view.loadUrl(url)
+            return true
+        }
 
         fun goBack(profileName: String): Boolean {
             val view = webViews[profileName] ?: return false

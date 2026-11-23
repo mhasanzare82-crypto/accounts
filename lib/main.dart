@@ -4,46 +4,86 @@ import 'package:flutter/services.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const ChatGPTAccountsApp());
+  runApp(const WebTabsApp());
 }
 
-class ChatGPTAccountsApp extends StatelessWidget {
-  const ChatGPTAccountsApp({super.key});
+class WebTabsApp extends StatelessWidget {
+  const WebTabsApp({super.key});
+
   @override
   Widget build(BuildContext context) => MaterialApp(
-    debugShowCheckedModeBanner: false,
-    title: 'accounts',
-    theme: ThemeData(
-      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF10A37F), brightness: Brightness.light),
-      useMaterial3: true,
-    ),
-    home: const AccountsHomePage(),
-  );
+        debugShowCheckedModeBanner: false,
+        title: 'مدیریت صفحات وب',
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xFF10A37F),
+            brightness: Brightness.light,
+          ),
+          useMaterial3: true,
+        ),
+        home: const WebTabsHomePage(),
+      );
 }
 
-class _AccountProfile {
-  const _AccountProfile({required this.profileName, required this.defaultLabel});
-  final String profileName;
-  final String defaultLabel;
+class _TabConfig {
+  const _TabConfig({required this.name, required this.url});
+  final String name;
+  final String url;
+
+  _TabConfig copyWith({String? name, String? url}) =>
+      _TabConfig(name: name ?? this.name, url: url ?? this.url);
+
+  Map<String, String> toMap() => {'name': name, 'url': url};
+
+  static _TabConfig fromMap(dynamic value, int index) {
+    final map = value is Map ? value : const {};
+    return _TabConfig(
+      name: (map['name'] ?? 'صفحه ${index + 1}').toString(),
+      url: (map['url'] ?? 'https://chatgpt.com/').toString(),
+    );
+  }
 }
-const _accountProfiles = [
-  _AccountProfile(profileName: 'chatgpt_account_one', defaultLabel: 'حساب ۱'),
-  _AccountProfile(profileName: 'chatgpt_account_two', defaultLabel: 'حساب ۲'),
-  _AccountProfile(profileName: 'chatgpt_account_three', defaultLabel: 'حساب ۳'),
-  _AccountProfile(profileName: 'chatgpt_account_four', defaultLabel: 'حساب ۴'),
+
+const _profileNames = [
+  'web_tab_profile_one',
+  'web_tab_profile_two',
+  'web_tab_profile_three',
 ];
 
-class AccountsHomePage extends StatefulWidget {
-  const AccountsHomePage({super.key});
-  @override
-  State<AccountsHomePage> createState() => _AccountsHomePageState();
+const _defaultConfigs = [
+  _TabConfig(name: 'صفحه اول', url: 'https://chatgpt.com/'),
+  _TabConfig(name: 'صفحه دوم', url: 'https://chatgpt.com/'),
+  _TabConfig(name: 'صفحه سوم', url: 'https://chatgpt.com/'),
+];
+
+bool _isValidHttpsUrl(String value) {
+  final uri = Uri.tryParse(value.trim());
+  return uri != null &&
+      uri.scheme.toLowerCase() == 'https' &&
+      uri.host.isNotEmpty &&
+      uri.userInfo.isEmpty;
 }
-class _AccountsHomePageState extends State<AccountsHomePage> with WidgetsBindingObserver {
-  static const _channel = MethodChannel('com.example.chatgpt_accounts/profiles');
-  late final Future<bool> _profilesSupported;
+
+class WebTabsHomePage extends StatefulWidget {
+  const WebTabsHomePage({super.key});
+
+  @override
+  State<WebTabsHomePage> createState() => _WebTabsHomePageState();
+}
+
+class _WebTabsHomePageState extends State<WebTabsHomePage>
+    with WidgetsBindingObserver {
+  static const _channel =
+      MethodChannel('com.example.chatgpt_accounts/profiles');
+
   int _selectedIndex = 0;
-  late final List<Widget?> _accountViews;
-  List<String> _labels = _accountProfiles.map((a) => a.defaultLabel).toList();
+  List<_TabConfig> _configs = List<_TabConfig>.from(_defaultConfigs);
+  late final List<Widget?> _webViews;
+  late final List<TextEditingController> _nameControllers;
+  late final List<TextEditingController> _urlControllers;
+  bool _loading = true;
+  bool _saving = false;
+  bool _profilesSupported = true;
   bool _microphoneGranted = false;
   bool _checkingMicrophone = true;
 
@@ -51,15 +91,69 @@ class _AccountsHomePageState extends State<AccountsHomePage> with WidgetsBinding
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _profilesSupported = _checkProfileSupport();
-    // Create only the first account's platform view. Other WebViews are
-    // created on first selection and retained in the IndexedStack thereafter.
-    _accountViews = List<Widget?>.generate(
-      _accountProfiles.length,
-      (index) => index == 0 ? _createAccountView(index) : null,
+    _webViews = List<Widget?>.generate(
+      3,
+      (index) => index == 0 ? _createWebView(index) : null,
     );
-    _loadLabels();
+    _nameControllers = List.generate(
+      3,
+      (index) => TextEditingController(text: _configs[index].name),
+    );
+    _urlControllers = List.generate(
+      3,
+      (index) => TextEditingController(text: _configs[index].url),
+    );
+    _loadSettings();
+    _checkProfileSupport();
     _refreshMicrophonePermission();
+  }
+
+  Future<void> _loadSettings() async {
+    try {
+      final saved = await _channel.invokeMethod<List<dynamic>>('getTabConfigs');
+      if (saved != null && saved.length == 3) {
+        final loaded = List.generate(
+          3,
+          (index) => _TabConfig.fromMap(saved[index], index),
+        );
+        if (loaded.every((c) => c.name.trim().isNotEmpty && _isValidHttpsUrl(c.url))) {
+          _configs = loaded;
+          for (var i = 0; i < 3; i++) {
+            _nameControllers[i].text = loaded[i].name;
+            _urlControllers[i].text = loaded[i].url;
+          }
+        }
+      }
+    } catch (_) {
+      _showMessage('بارگذاری تنظیمات انجام نشد.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _checkProfileSupport() async {
+    try {
+      final supported =
+          await _channel.invokeMethod<bool>('isMultiProfileSupported') ?? false;
+      if (mounted) setState(() => _profilesSupported = supported);
+    } catch (_) {
+      if (mounted) setState(() => _profilesSupported = false);
+    }
+  }
+
+  Future<void> _refreshMicrophonePermission() async {
+    try {
+      final granted =
+          await _channel.invokeMethod<bool>('hasMicrophonePermission') ?? false;
+      if (mounted) {
+        setState(() {
+          _microphoneGranted = granted;
+          _checkingMicrophone = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _checkingMicrophone = false);
+    }
   }
 
   @override
@@ -67,322 +161,294 @@ class _AccountsHomePageState extends State<AccountsHomePage> with WidgetsBinding
     if (state == AppLifecycleState.resumed) _refreshMicrophonePermission();
   }
 
-  Future<void> _refreshMicrophonePermission() async {
+  Widget _createWebView(int index) {
+    return _AccountWebView(
+      key: ValueKey(_profileNames[index]),
+      profileName: _profileNames[index],
+      initialUrl: _configs[index].url,
+    );
+  }
+
+  void _selectTab(int index) {
+    if (index < 0 || index > 3 || index == _selectedIndex) return;
+    setState(() {
+      if (index < 3) _webViews[index] ??= _createWebView(index);
+      _selectedIndex = index;
+    });
+  }
+
+  Future<void> _saveSettings() async {
+    if (_saving) return;
+    final updated = <_TabConfig>[];
+    for (var i = 0; i < 3; i++) {
+      final name = _nameControllers[i].text.trim();
+      final url = _urlControllers[i].text.trim();
+      if (name.isEmpty) {
+        _showMessage('نام تب ${i + 1} را وارد کن.');
+        return;
+      }
+      if (!_isValidHttpsUrl(url)) {
+        _showMessage('لینک تب ${i + 1} معتبر نیست؛ آدرس باید با https:// شروع شود.');
+        return;
+      }
+      updated.add(_TabConfig(name: name, url: Uri.parse(url).toString()));
+    }
+
+    setState(() => _saving = true);
+    var saved = false;
     try {
-      final granted = await _channel.invokeMethod<bool>('hasMicrophonePermission') ?? false;
-      if (mounted) setState(() { _microphoneGranted = granted; _checkingMicrophone = false; });
+      saved = await _channel.invokeMethod<bool>(
+            'saveTabConfigs',
+            {'tabs': updated.map((config) => config.toMap()).toList()},
+          ) ??
+          false;
+      if (saved) {
+        for (var i = 0; i < 3; i++) {
+          if (_webViews[i] != null) {
+            await _channel.invokeMethod<bool>('loadAccountUrl', {
+              'profileName': _profileNames[i],
+              'url': updated[i].url,
+            });
+          }
+        }
+      }
     } catch (_) {
-      if (mounted) setState(() => _checkingMicrophone = false);
+      saved = false;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _saving = false;
+      if (saved) _configs = updated;
+    });
+    _showMessage(saved
+        ? 'تنظیمات ذخیره شد و صفحات به‌روزرسانی شدند.'
+        : 'ذخیره تنظیمات انجام نشد؛ دوباره تلاش کن.');
+  }
+
+  Future<void> _refreshSelectedTab() async {
+    if (_selectedIndex >= 3) return;
+    try {
+      await _channel.invokeMethod<bool>('reloadAccount', {
+        'profileName': _profileNames[_selectedIndex],
+      });
+    } catch (_) {
+      _showMessage('بارگذاری دوباره صفحه انجام نشد.');
     }
   }
 
-  Future<void> _requestMicrophonePermission() async {
-    try {
-      await _channel.invokeMethod<void>('requestMicrophonePermission');
-    } on PlatformException {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('درخواست مجوز میکروفون انجام نشد.')));
-    } on MissingPluginException {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('امکان درخواست مجوز در این نسخه وجود ندارد.')));
+  Future<void> _handleBack() async {
+    if (_selectedIndex >= 3) {
+      _selectTab(0);
+      return;
     }
-    await _refreshMicrophonePermission();
+    try {
+      final wentBack = await _channel.invokeMethod<bool>('handleBack', {
+        'profileName': _profileNames[_selectedIndex],
+      });
+      if (wentBack != true && mounted) {
+        _showMessage('برای خروج، دوباره دکمه بازگشت را لمس کن.');
+      }
+    } catch (_) {}
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message, textDirection: TextDirection.rtl)),
+    );
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    for (final controller in _nameControllers) {
+      controller.dispose();
+    }
+    for (final controller in _urlControllers) {
+      controller.dispose();
+    }
     super.dispose();
-  }
-
-  Future<void> _loadLabels() async {
-    try {
-      final saved = await _channel.invokeMethod<List<dynamic>>('getAccountLabels');
-      if (saved != null && saved.length == 4) {
-        final names = saved.map((e) => e.toString().trim()).toList();
-        if (names.every((e) => e.isNotEmpty) && mounted) setState(() => _labels = names);
-      }
-    } catch (_) {}
-  }
-
-  Future<bool> _saveLabels(List<String> labels) async {
-    try {
-      return await _channel.invokeMethod<bool>('saveAccountLabels', {'labels': labels}) ?? false;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  Future<void> _rename(int i) async {
-    final ctl = TextEditingController(text: _labels[i]);
-    final name = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('تغییر نام حساب'),
-        content: TextField(
-          controller: ctl,
-          autofocus: true,
-          maxLength: 30,
-          textDirection: TextDirection.rtl,
-          decoration: const InputDecoration(labelText: 'نام حساب'),
-          onSubmitted: (v) { if (v.trim().isNotEmpty) Navigator.pop(ctx, v.trim()); },
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('لغو')),
-          FilledButton(onPressed: () { if (ctl.text.trim().isNotEmpty) Navigator.pop(ctx, ctl.text.trim()); }, child: const Text('ذخیره')),
-        ],
-      ),
-    );
-    ctl.dispose();
-    if (name == null || name.trim().isEmpty || !mounted) return;
-    final updated = List<String>.from(_labels)..[i] = name.trim();
-    final saved = await _saveLabels(updated);
-    if (!mounted) return;
-    if (saved) {
-      setState(() => _labels = updated);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ذخیره نام حساب انجام نشد؛ دوباره تلاش کن.')));
-    }
-  }
-
-  Future<bool> _checkProfileSupport() async {
-    try {
-      return await _channel.invokeMethod<bool>('isMultiProfileSupported') ?? false;
-    } on PlatformException { return false; } on MissingPluginException { return false; }
-  }
-
-  Widget _createAccountView(int index) {
-    final account = _accountProfiles[index];
-    return _AccountWebView(
-      key: ValueKey(account.profileName),
-      profileName: account.profileName,
-    );
-  }
-
-  void _selectAccount(int index) {
-    if (index < 0 || index >= _accountProfiles.length || index == _selectedIndex) return;
-    setState(() {
-      _accountViews[index] ??= _createAccountView(index);
-      _selectedIndex = index;
-    });
-  }
-
-  Future<void> _handleBack() async {
-    try {
-      await _channel.invokeMethod<bool>('handleBack', {'profileName': _accountProfiles[_selectedIndex].profileName});
-    } on PlatformException {} on MissingPluginException {}
-  }
-
-  Future<void> _refreshSelectedAccount() async {
-    try {
-      await _channel.invokeMethod<bool>('reloadAccount', {
-        'profileName': _accountProfiles[_selectedIndex].profileName,
-      });
-    } on PlatformException {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('رفرش صفحه انجام نشد. دوباره تلاش کن.')),
-        );
-      }
-    } on MissingPluginException {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('قابلیت رفرش در این نسخه در دسترس نیست.')),
-        );
-      }
-    }
   }
 
   @override
   Widget build(BuildContext context) => PopScope(
-    canPop: false,
-    onPopInvoked: (didPop) { if (!didPop) _handleBack(); },
-    child: Scaffold(
-      appBar: AppBar(
-        title: Text(_labels[_selectedIndex]),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            tooltip: 'رفرش صفحه',
-            onPressed: _refreshSelectedAccount,
-            icon: const Icon(Icons.refresh),
+        canPop: false,
+        onPopInvoked: (didPop) {
+          if (!didPop) _handleBack();
+        },
+        child: Scaffold(
+          appBar: AppBar(
+            title: Text(
+              _selectedIndex == 3 ? 'تنظیمات' : _configs[_selectedIndex].name,
+            ),
+            centerTitle: true,
+            actions: [
+              if (_selectedIndex < 3)
+                IconButton(
+                  tooltip: 'بارگذاری دوباره',
+                  onPressed: _refreshSelectedTab,
+                  icon: const Icon(Icons.refresh),
+                ),
+            ],
           ),
-        ],
-      ),
-      body: Column(
-        children: [
-          if (!_checkingMicrophone && !_microphoneGranted)
-            Material(
-              color: Theme.of(context).colorScheme.secondaryContainer,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-                child: Row(
+          body: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : IndexedStack(
+                  index: _selectedIndex,
                   children: [
-                    const Icon(Icons.mic_none),
-                    const SizedBox(width: 10),
-                    const Expanded(
-                      child: Text(
-                        'برای استفاده از قابلیت گفت‌وگوی صوتی، مجوز میکروفون را فعال کن.',
-                        textDirection: TextDirection.rtl,
-                        style: TextStyle(height: 1.5),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    FilledButton(
-                      onPressed: _requestMicrophonePermission,
-                      child: const Text('فعال‌سازی'),
+                    for (var i = 0; i < 3; i++)
+                      _profilesSupported
+                          ? (_webViews[i] ?? const SizedBox.shrink())
+                          : const _UnsupportedProfilesMessage(),
+                    _SettingsPage(
+                      nameControllers: _nameControllers,
+                      urlControllers: _urlControllers,
+                      saving: _saving,
+                      onSave: _saveSettings,
                     ),
                   ],
                 ),
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: _selectedIndex,
+            onDestinationSelected: _selectTab,
+            destinations: [
+              for (var i = 0; i < 3; i++)
+                NavigationDestination(
+                  icon: const Icon(Icons.language),
+                  label: _configs[i].name,
+                ),
+              const NavigationDestination(
+                icon: Icon(Icons.settings),
+                label: 'تنظیمات',
+              ),
+            ],
+          ),
+        ),
+      );
+}
+
+class _SettingsPage extends StatelessWidget {
+  const _SettingsPage({
+    required this.nameControllers,
+    required this.urlControllers,
+    required this.saving,
+    required this.onSave,
+  });
+
+  final List<TextEditingController> nameControllers;
+  final List<TextEditingController> urlControllers;
+  final bool saving;
+  final VoidCallback onSave;
+
+  @override
+  Widget build(BuildContext context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            const Text(
+              'نام و لینک هر تب را مشخص کن. تغییرات پس از ذخیره در حافظه گوشی باقی می‌مانند.',
+              style: TextStyle(height: 1.7),
+            ),
+            const SizedBox(height: 12),
+            for (var i = 0; i < 3; i++) ...[
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'تب ${i + 1}',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: nameControllers[i],
+                        maxLength: 30,
+                        decoration: const InputDecoration(
+                          labelText: 'نام تب',
+                          border: OutlineInputBorder(),
+                          counterText: '',
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: urlControllers[i],
+                        keyboardType: TextInputType.url,
+                        textDirection: TextDirection.ltr,
+                        decoration: const InputDecoration(
+                          labelText: 'لینک صفحه (HTTPS)',
+                          hintText: 'https://example.com',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+            const SizedBox(height: 8),
+            FilledButton.icon(
+              onPressed: saving ? null : onSave,
+              icon: saving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save),
+              label: Text(saving ? 'در حال ذخیره...' : 'ذخیره تنظیمات'),
+            ),
+            const SizedBox(height: 18),
+            const ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.mic),
+              title: Text('دسترسی میکروفون'),
+              subtitle: Text(
+                'هر سه صفحه می‌توانند درخواست میکروفون بدهند. دسترسی فقط برای صفحات HTTPS و پس از تأیید مجوز اندروید و درخواست سایت برقرار می‌شود.',
               ),
             ),
-          Expanded(
-            child: FutureBuilder<bool>(
-              future: _profilesSupported,
-              builder: (context, s) {
-                if (s.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
-                if (s.data != true) return const _UnsupportedProfilesMessage();
-                return IndexedStack(
-                  index: _selectedIndex,
-                  children: List<Widget>.generate(
-                    _accountProfiles.length,
-                    (index) => _accountViews[index] ?? const SizedBox.shrink(),
-                    growable: false,
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: _AccountNavigationBar(
-        labels: _labels,
-        selectedIndex: _selectedIndex,
-        onSelect: _selectAccount,
-        onRename: _rename,
-      ),
-    ),
-  );
-}
-
-class _AccountNavigationBar extends StatelessWidget {
-  const _AccountNavigationBar({required this.labels, required this.selectedIndex, required this.onSelect, required this.onRename});
-  final List<String> labels;
-  final int selectedIndex;
-  final ValueChanged<int> onSelect;
-  final ValueChanged<int> onRename;
-
-  @override
-  Widget build(BuildContext context) => Material(
-    color: Theme.of(context).colorScheme.surface,
-    elevation: 3,
-    child: SafeArea(
-      top: false,
-      child: SizedBox(
-        height: 68,
-        child: Row(
-          children: List.generate(4, (i) => Expanded(
-            child: _AccountNavigationItem(
-              label: labels[i],
-              selected: selectedIndex == i,
-              onSelect: () => onSelect(i),
-              onRename: () => onRename(i),
-            ),
-          )),
+          ],
         ),
-      ),
-    ),
-  );
-}
-
-class _AccountNavigationItem extends StatefulWidget {
-  const _AccountNavigationItem({required this.label, required this.selected, required this.onSelect, required this.onRename});
-  final String label;
-  final bool selected;
-  final VoidCallback onSelect;
-  final VoidCallback onRename;
-  @override
-  State<_AccountNavigationItem> createState() => _AccountNavigationItemState();
-}
-class _AccountNavigationItemState extends State<_AccountNavigationItem> {
-  Timer? _holdTimer;
-  bool _renamedByHold = false;
-
-  void _pointerDown(PointerDownEvent event) {
-    _holdTimer?.cancel();
-    _renamedByHold = false;
-    _holdTimer = Timer(const Duration(seconds: 3), () {
-      _renamedByHold = true;
-      widget.onRename();
-    });
-  }
-
-  void _pointerUp(PointerEvent event) {
-    _holdTimer?.cancel();
-    _holdTimer = null;
-    if (!_renamedByHold) widget.onSelect();
-  }
-
-  void _pointerCancel(PointerEvent event) {
-    _holdTimer?.cancel();
-    _holdTimer = null;
-  }
-
-  @override
-  void dispose() {
-    _holdTimer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final color = widget.selected ? colorScheme.primary : colorScheme.onSurfaceVariant;
-    return Listener(
-      onPointerDown: _pointerDown,
-      onPointerUp: _pointerUp,
-      onPointerCancel: _pointerCancel,
-      child: Semantics(
-        button: true,
-        label: widget.label,
-        child: SizedBox.expand(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 7),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.account_circle, size: 24, color: color),
-                const SizedBox(height: 3),
-                Text(widget.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: color)),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+      );
 }
 
 class _AccountWebView extends StatelessWidget {
-  const _AccountWebView({super.key, required this.profileName});
+  const _AccountWebView({
+    super.key,
+    required this.profileName,
+    required this.initialUrl,
+  });
+
   final String profileName;
+  final String initialUrl;
+
   @override
   Widget build(BuildContext context) => AndroidView(
-    viewType: 'chatgpt/accounts_webview',
-    creationParams: <String, String>{'profileName': profileName, 'initialUrl': 'https://chatgpt.com/'},
-    creationParamsCodec: const StandardMessageCodec(),
-  );
+        viewType: 'chatgpt/accounts_webview',
+        creationParams: <String, String>{
+          'profileName': profileName,
+          'initialUrl': initialUrl,
+        },
+        creationParamsCodec: const StandardMessageCodec(),
+      );
 }
 
 class _UnsupportedProfilesMessage extends StatelessWidget {
   const _UnsupportedProfilesMessage();
+
   @override
   Widget build(BuildContext context) => const Center(
-    child: Padding(
-      padding: EdgeInsets.all(24),
-      child: Text(
-        'نسخه WebView این دستگاه از نشست‌های مستقل پشتیبانی نمی‌کند. برای جلوگیری از ورود اشتباه یا مشترک شدن حساب‌ها، صفحه‌ها باز نشدند. لطفاً Android System WebView یا Chrome را به‌روزرسانی کنید و دوباره برنامه را باز کنید.',
-        textAlign: TextAlign.center,
-        style: TextStyle(fontSize: 16, height: 1.8),
-      ),
-    ),
-  );
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'نسخه Android System WebView این دستگاه از پروفایل‌های مستقل پشتیبانی نمی‌کند. برای جلوگیری از اشتراک کوکی‌ها، صفحات باز نشدند. لطفاً Android System WebView یا Chrome را به‌روزرسانی کن.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 16, height: 1.8),
+          ),
+        ),
+      );
 }
