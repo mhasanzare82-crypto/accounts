@@ -98,9 +98,26 @@ class _AccountsHomePageState extends State<AccountsHomePage> {
     }
   }
 
+  Future<void> _handleBack() async {
+    try {
+      await _channel.invokeMethod<bool>('handleBack', {
+        'profileName': _accountProfiles[_selectedIndex].profileName,
+      });
+    } on PlatformException {
+      // Back should never close the app.
+    } on MissingPluginException {
+      // Back should never close the app.
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) {
+        if (!didPop) _handleBack();
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: Text(_accountProfiles[_selectedIndex].label),
         centerTitle: true,
