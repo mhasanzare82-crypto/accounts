@@ -16,7 +16,6 @@ import android.webkit.WebView
 import android.webkit.WebChromeClient
 import android.webkit.PermissionRequest
 import android.webkit.WebViewClient
-import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.core.content.ContextCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
@@ -124,6 +123,10 @@ class MainActivity : FlutterActivity() {
                         val profileName = call.argument<String>("profileName")
                         result.success(profileName?.let { ChatGPTWebPlatformView.goBack(it) } ?: false)
                     }
+                    "reloadAccount" -> {
+                        val profileName = call.argument<String>("profileName")
+                        result.success(profileName?.let { ChatGPTWebPlatformView.reload(it) } ?: false)
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -145,7 +148,6 @@ private class ChatGPTWebPlatformView(
     private val profileName: String,
     initialUrl: String
 ) : PlatformView {
-    private val swipeRefresh = SwipeRefreshLayout(context)
     private val container = FrameLayout(context)
     private val webView = WebView(context)
     private val loadingIndicator = ProgressBar(context)
@@ -183,7 +185,6 @@ private class ChatGPTWebPlatformView(
             }
 
             override fun onPageFinished(view: WebView, url: String?) {
-                swipeRefresh.isRefreshing = false
                 loadingIndicator.visibility = View.GONE
             }
 
@@ -193,7 +194,6 @@ private class ChatGPTWebPlatformView(
                 error: android.webkit.WebResourceError
             ) {
                 if (request.isForMainFrame) {
-                    swipeRefresh.isRefreshing = false
                     loadingIndicator.visibility = View.GONE
                     errorMessage.visibility = View.VISIBLE
                 }
@@ -205,7 +205,6 @@ private class ChatGPTWebPlatformView(
                 errorResponse: android.webkit.WebResourceResponse
             ) {
                 if (request.isForMainFrame && errorResponse.statusCode >= 500) {
-                    swipeRefresh.isRefreshing = false
                     loadingIndicator.visibility = View.GONE
                     errorMessage.visibility = View.VISIBLE
                 }
@@ -217,7 +216,6 @@ private class ChatGPTWebPlatformView(
                 error: android.net.http.SslError
             ) {
                 handler.cancel()
-                swipeRefresh.isRefreshing = false
                 loadingIndicator.visibility = View.GONE
                 errorMessage.visibility = View.VISIBLE
             }
@@ -244,9 +242,6 @@ private class ChatGPTWebPlatformView(
             }
         }
 
-        swipeRefresh.setOnRefreshListener {
-            webView.reload()
-        }
         container.addView(webView, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT
@@ -261,23 +256,19 @@ private class ChatGPTWebPlatformView(
             FrameLayout.LayoutParams.WRAP_CONTENT,
             Gravity.CENTER
         ))
-        swipeRefresh.addView(container)
-        swipeRefresh.setColorSchemeResources(android.R.color.holo_green_dark)
         webViews[profileName] = webView
         webView.loadUrl(initialUrl)
     }
 
-    override fun getView(): View = swipeRefresh
+    override fun getView(): View = container
 
     override fun dispose() {
-        swipeRefresh.setOnRefreshListener(null)
         webView.stopLoading()
         webView.loadUrl("about:blank")
         webView.clearHistory()
         webView.removeAllViews()
         webView.destroy()
         webViews.remove(profileName)
-        swipeRefresh.removeAllViews()
     }
 
     companion object {
@@ -287,6 +278,12 @@ private class ChatGPTWebPlatformView(
             val view = webViews[profileName] ?: return false
             if (!view.canGoBack()) return false
             view.goBack()
+            return true
+        }
+
+        fun reload(profileName: String): Boolean {
+            val view = webViews[profileName] ?: return false
+            view.reload()
             return true
         }
     }
