@@ -42,6 +42,7 @@ class _AccountsHomePageState extends State<AccountsHomePage> with WidgetsBinding
   static const _channel = MethodChannel('com.example.chatgpt_accounts/profiles');
   late final Future<bool> _profilesSupported;
   int _selectedIndex = 0;
+  late final List<Widget?> _accountViews;
   List<String> _labels = _accountProfiles.map((a) => a.defaultLabel).toList();
   bool _microphoneGranted = false;
   bool _checkingMicrophone = true;
@@ -51,6 +52,12 @@ class _AccountsHomePageState extends State<AccountsHomePage> with WidgetsBinding
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _profilesSupported = _checkProfileSupport();
+    // Create only the first account's platform view. Other WebViews are
+    // created on first selection and retained in the IndexedStack thereafter.
+    _accountViews = List<Widget?>.generate(
+      _accountProfiles.length,
+      (index) => index == 0 ? _createAccountView(index) : null,
+    );
     _loadLabels();
     _refreshMicrophonePermission();
   }
@@ -142,6 +149,22 @@ class _AccountsHomePageState extends State<AccountsHomePage> with WidgetsBinding
     } on PlatformException { return false; } on MissingPluginException { return false; }
   }
 
+  Widget _createAccountView(int index) {
+    final account = _accountProfiles[index];
+    return _AccountWebView(
+      key: ValueKey(account.profileName),
+      profileName: account.profileName,
+    );
+  }
+
+  void _selectAccount(int index) {
+    if (index < 0 || index >= _accountProfiles.length || index == _selectedIndex) return;
+    setState(() {
+      _accountViews[index] ??= _createAccountView(index);
+      _selectedIndex = index;
+    });
+  }
+
   Future<void> _handleBack() async {
     try {
       await _channel.invokeMethod<bool>('handleBack', {'profileName': _accountProfiles[_selectedIndex].profileName});
@@ -189,7 +212,11 @@ class _AccountsHomePageState extends State<AccountsHomePage> with WidgetsBinding
                 if (s.data != true) return const _UnsupportedProfilesMessage();
                 return IndexedStack(
                   index: _selectedIndex,
-                  children: _accountProfiles.map((a) => _AccountWebView(key: ValueKey(a.profileName), profileName: a.profileName)).toList(growable: false),
+                  children: List<Widget>.generate(
+                    _accountProfiles.length,
+                    (index) => _accountViews[index] ?? const SizedBox.shrink(),
+                    growable: false,
+                  ),
                 );
               },
             ),
@@ -199,7 +226,7 @@ class _AccountsHomePageState extends State<AccountsHomePage> with WidgetsBinding
       bottomNavigationBar: _AccountNavigationBar(
         labels: _labels,
         selectedIndex: _selectedIndex,
-        onSelect: (i) => setState(() => _selectedIndex = i),
+        onSelect: _selectAccount,
         onRename: _rename,
       ),
     ),
