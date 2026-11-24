@@ -109,7 +109,10 @@ class _WebTabsHomePageState extends State<WebTabsHomePage>
     } catch (_) {
       _message('بارگذاری تنظیمات انجام نشد.');
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        _views.putIfAbsent(_tabs[_selected].id, () => _viewFor(_tabs[_selected]));
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -150,24 +153,24 @@ class _WebTabsHomePageState extends State<WebTabsHomePage>
     });
   }
 
-  Future<void> _save(List<_TabConfig> next) async {
-    if (_saving) return;
+  Future<bool> _save(List<_TabConfig> next) async {
+    if (_saving) return false;
     if (next.isEmpty) {
       _message('حداقل یک تب باید باقی بماند.');
-      return;
+      return false;
     }
     if (next.map((t) => t.id).toSet().length != next.length) {
       _message('شناسه تب‌ها تکراری است.');
-      return;
+      return false;
     }
     for (var i = 0; i < next.length; i++) {
       if (next[i].name.trim().isEmpty) {
         _message('نام تب ' + (i + 1).toString() + ' را وارد کن.');
-        return;
+        return false;
       }
       if (!_validUrl(next[i].url)) {
         _message('آدرس تب ' + (i + 1).toString() + ' باید HTTPS معتبر باشد.');
-        return;
+        return false;
       }
     }
 
@@ -192,7 +195,7 @@ class _WebTabsHomePageState extends State<WebTabsHomePage>
       ok = false;
     }
 
-    if (!mounted) return;
+    if (!mounted) return false;
     if (ok) {
       final newIds = next.map((t) => t.id).toSet();
       _views.removeWhere((id, view) => !newIds.contains(id));
@@ -202,9 +205,11 @@ class _WebTabsHomePageState extends State<WebTabsHomePage>
         _saving = false;
       });
       _message('تب‌ها و تنظیمات ذخیره شدند.');
+      return true;
     } else {
       setState(() => _saving = false);
       _message('ذخیره تنظیمات انجام نشد.');
+      return false;
     }
   }
 
@@ -338,7 +343,7 @@ class _SettingsPage extends StatefulWidget {
   final bool saving;
   final bool micGranted;
   final bool checkingMic;
-  final Future<void> Function(List<_TabConfig>) onSave;
+  final Future<bool> Function(List<_TabConfig>) onSave;
 
   @override
   State<_SettingsPage> createState() => _SettingsPageState();
@@ -380,8 +385,8 @@ class _SettingsPageState extends State<_SettingsPage> {
     for (var i = 0; i < _tabs.length; i++) {
       result.add(_tabs[i].copyWith(name: _names[i].text.trim(), url: _urls[i].text.trim()));
     }
-    await widget.onSave(result);
-    if (mounted && !widget.saving) Navigator.of(context).pop();
+    final saved = await widget.onSave(result);
+    if (mounted && saved) Navigator.of(context).pop();
   }
 
   @override
