@@ -84,7 +84,8 @@ class _WebTabsHomePageState extends State<WebTabsHomePage>
   int _selected = 0;
   bool _loading = true;
   bool _saving = false;
-  bool _profilesSupported = true;
+  bool _profilesSupported = false;
+  bool _profilesChecked = false;
   bool _micGranted = false;
   bool _checkingMic = true;
 
@@ -119,9 +120,15 @@ class _WebTabsHomePageState extends State<WebTabsHomePage>
   Future<void> _checkProfiles() async {
     try {
       final ok = await _channel.invokeMethod<bool>('isMultiProfileSupported') ?? false;
-      if (mounted) setState(() => _profilesSupported = ok);
+      if (mounted) setState(() {
+        _profilesSupported = ok;
+        _profilesChecked = true;
+      });
     } catch (_) {
-      if (mounted) setState(() => _profilesSupported = false);
+      if (mounted) setState(() {
+        _profilesSupported = false;
+        _profilesChecked = true;
+      });
     }
   }
 
@@ -147,8 +154,13 @@ class _WebTabsHomePageState extends State<WebTabsHomePage>
 
   void _select(int index) {
     if (index < 0 || index >= _tabs.length) return;
+    if (_selected == index) return;
     setState(() {
-      _views.putIfAbsent(_tabs[index].id, () => _viewFor(_tabs[index]));
+      // Keep only the active native WebView alive. Its profile data and cookies
+      // remain persisted by AndroidX WebKit; this prevents one WebView per tab
+      // from accumulating and exhausting the app's memory.
+      _views.clear();
+      _views[_tabs[index].id] = _viewFor(_tabs[index]);
       _selected = index;
     });
   }
@@ -198,8 +210,6 @@ class _WebTabsHomePageState extends State<WebTabsHomePage>
     if (!mounted) return false;
     if (ok) {
       final selectedId = _tabs[_selected].id;
-      final newIds = next.map((t) => t.id).toSet();
-      _views.removeWhere((id, view) => !newIds.contains(id));
       setState(() {
         _tabs = next.map((t) => t.copyWith(url: Uri.parse(t.url.trim()).toString())).toList();
         final preservedIndex = _tabs.indexWhere((tab) => tab.id == selectedId);
@@ -208,6 +218,8 @@ class _WebTabsHomePageState extends State<WebTabsHomePage>
         } else if (_selected >= _tabs.length) {
           _selected = _tabs.length - 1;
         }
+        _views.clear();
+        _views[_tabs[_selected].id] = _viewFor(_tabs[_selected]);
         _saving = false;
       });
       _message('تب‌ها و تنظیمات ذخیره شدند.');
@@ -288,15 +300,11 @@ class _WebTabsHomePageState extends State<WebTabsHomePage>
           ),
           body: _loading
               ? const Center(child: CircularProgressIndicator())
-              : !_profilesSupported
-                  ? const _UnsupportedProfilesMessage()
-                  : IndexedStack(
-                      index: _selected,
-                      children: [
-                        for (final tab in _tabs)
-                          _views[tab.id] ?? const SizedBox.shrink(),
-                      ],
-                    ),
+              : !_profilesChecked
+                  ? const Center(child: CircularProgressIndicator())
+                  : !_profilesSupported
+                      ? const _UnsupportedProfilesMessage()
+                      : (_views[_tabs[_selected].id] ?? const SizedBox.shrink()),
           bottomNavigationBar: _loading || !_profilesSupported
               ? null
               : SafeArea(
