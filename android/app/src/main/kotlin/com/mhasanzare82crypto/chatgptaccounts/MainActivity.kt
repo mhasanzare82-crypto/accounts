@@ -113,19 +113,33 @@ class MainActivity : FlutterActivity() {
                         if (!valid || tabs == null) {
                             result.success(false)
                         } else {
+                            val prefs = getSharedPreferences("web_tab_configs", Context.MODE_PRIVATE)
+                            val previousUrls = mutableMapOf<String, String>()
+                            try {
+                                val previous = JSONArray(prefs.getString("tabs_json", "[]"))
+                                for (i in 0 until previous.length()) {
+                                    val item = previous.optJSONObject(i) ?: continue
+                                    previousUrls[item.optString("id")] = item.optString("url")
+                                }
+                            } catch (_: Exception) {
+                                // A malformed prior config is replaced by the validated new config.
+                            }
                             val array = JSONArray()
+                            val editor = prefs.edit()
                             tabs.forEach { tab ->
+                                val id = tab["id"]!!
+                                val url = Uri.parse(tab["url"]!!.trim()).toString()
                                 array.put(
                                     JSONObject()
-                                        .put("id", tab["id"])
+                                        .put("id", id)
                                         .put("name", tab["name"]!!.trim())
-                                        .put("url", Uri.parse(tab["url"]!!.trim()).toString())
+                                        .put("url", url)
                                 )
+                                if (previousUrls[id] != url) {
+                                    editor.putString("last_url_" + id, url)
+                                }
                             }
-                            result.success(
-                                getSharedPreferences("web_tab_configs", Context.MODE_PRIVATE)
-                                    .edit().putString("tabs_json", array.toString()).commit()
-                            )
+                            result.success(editor.putString("tabs_json", array.toString()).commit())
                         }
                     }
                     "loadAccountUrl" -> {
