@@ -197,11 +197,17 @@ class _WebTabsHomePageState extends State<WebTabsHomePage>
 
     if (!mounted) return false;
     if (ok) {
+      final selectedId = _tabs[_selected].id;
       final newIds = next.map((t) => t.id).toSet();
       _views.removeWhere((id, view) => !newIds.contains(id));
       setState(() {
         _tabs = next.map((t) => t.copyWith(url: Uri.parse(t.url.trim()).toString())).toList();
-        if (_selected >= _tabs.length) _selected = _tabs.length - 1;
+        final preservedIndex = _tabs.indexWhere((tab) => tab.id == selectedId);
+        if (preservedIndex >= 0) {
+          _selected = preservedIndex;
+        } else if (_selected >= _tabs.length) {
+          _selected = _tabs.length - 1;
+        }
         _saving = false;
       });
       _message('تب‌ها و تنظیمات ذخیره شدند.');
